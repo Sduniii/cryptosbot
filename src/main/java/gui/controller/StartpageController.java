@@ -1,11 +1,9 @@
 package gui.controller;
 
 import com.binance.api.client.domain.event.CandlestickEvent;
-import com.binance.api.client.domain.market.Candlestick;
 import gui.Listener.OnCloseListener;
-import gui.apis.Binance;
-import gui.apis.CallbackInterface;
-import gui.apis.Exchange;
+import gui.apis.*;
+import gui.apis.binance.Binance;
 import gui.models.BarData;
 import gui.models.CandleStickChart;
 import gui.models.DateAxis;
@@ -19,6 +17,8 @@ import javafx.fxml.Initializable;
 import javafx.geometry.Point2D;
 import javafx.scene.chart.NumberAxis;
 import javafx.scene.chart.XYChart;
+import javafx.scene.control.ChoiceBox;
+import javafx.scene.control.ListView;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
@@ -33,6 +33,12 @@ public class StartpageController implements Initializable, OnCloseListener, Call
 
     @FXML
     BorderPane borderPane;
+    @FXML
+    ChoiceBox<Exchange> cbExchange;
+    @FXML
+    ListView<Asset> lvAsset1;
+    @FXML
+    ListView<Asset> lvAsset2;
 
     private CandleStickChart candleStickChart;
 
@@ -42,42 +48,45 @@ public class StartpageController implements Initializable, OnCloseListener, Call
     private ObservableList<Exchange> exchanges = FXCollections.observableArrayList();
 
     public void initialize(URL location, ResourceBundle resources) {
-        last = new GregorianCalendar();
-        StackPane chartContainer = new StackPane();
+        String secret = "";
+        String key = "";
+        binance = new Binance(key, secret);
+        exchanges.add(binance);
 
-        String secret = "M7LoyltBakw8cpqnERcuKgO7Uy2pHNYtM4lquwRMECHZM6ORM7uIvRjUcL7GkUJK";
-        String key = "GvY4MH56MxZnWzI9xDFtzVYAZw7t8gV69lTY4JvhUsrHQ0tOorhpzfUnOlaH1a12";
-        binance = new Binance("Binance", key, secret);
-
-        candleStickChart = new CandleStickChart("test", buildData());
-        chartContainer.getChildren().add(candleStickChart);
-        final Rectangle zoomRect = new Rectangle();
-        zoomRect.setManaged(false);
-        zoomRect.setFill(Color.LIGHTSEAGREEN.deriveColor(0, 1, 1, 0.5));
-        chartContainer.getChildren().add(zoomRect);
-        setUpZooming(zoomRect, candleStickChart);
-        borderPane.setCenter(chartContainer);
-        binance.startWebsocket("trxeth");
-        binance.registerCallback(this);
-    }
-
-    private List<BarData> buildData() {
-        List<Candlestick> candles = binance.getCandlesticks("TRXETH");
-        List<BarData> data = new ArrayList<>();
-        candles.forEach(candlestick -> {
-            System.out.println(candlestick);
-            GregorianCalendar cal = new GregorianCalendar();
-            cal.setTimeInMillis(candlestick.getOpenTime());
-            BarData bar = new BarData(cal,
-                    Double.parseDouble(candlestick.getOpen()),
-                    Double.parseDouble(candlestick.getHigh()),
-                    Double.parseDouble(candlestick.getLow()),
-                    Double.parseDouble(candlestick.getClose()),
-                    (int) Double.parseDouble(candlestick.getVolume()));
-            data.add(bar);
+        cbExchange.setItems(exchanges);
+        cbExchange.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+            lvAsset1.setItems(newValue.getBaseAssets());
+            FXCollections.sort(lvAsset1.getItems(),Asset.comparator());
         });
-        return data;
+
+        lvAsset1.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+            lvAsset2.setItems(newValue.getSymbols());
+            FXCollections.sort(lvAsset2.getItems(),Asset.comparator());
+        });
+        lvAsset2.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+                Exchange ex = cbExchange.getSelectionModel().getSelectedItem();
+                Asset asset1 = lvAsset1.getSelectionModel().getSelectedItem();
+
+                if (asset1 != null && ex != null) {
+                    ex.clearCallbacks();
+                    last = new GregorianCalendar();
+                    StackPane chartContainer = new StackPane();
+                    String symbol = asset1.toString() + newValue.toString();
+                    candleStickChart = new CandleStickChart(ex.getName() +  symbol.toUpperCase(), ex.buildData(symbol.toUpperCase()));
+                    chartContainer.getChildren().add(candleStickChart);
+                    final Rectangle zoomRect = new Rectangle();
+                    zoomRect.setManaged(false);
+                    zoomRect.setFill(Color.LIGHTSEAGREEN.deriveColor(0, 1, 1, 0.5));
+                    chartContainer.getChildren().add(zoomRect);
+                    setUpZooming(zoomRect, candleStickChart);
+                    borderPane.setCenter(chartContainer);
+                    ex.registerCallback(this);
+                    ex.startWebsocket(symbol);
+                }
+
+        });
     }
+
 
     public void shiftSeriesValue(XYChart.Series<String, Number> series, String label, double newValue) {
         int numOfPoint = series.getData().size();
@@ -153,6 +162,7 @@ public class StartpageController implements Initializable, OnCloseListener, Call
         GregorianCalendar cal = new GregorianCalendar();
         new GregorianCalendar().setTimeInMillis(candlestick.getEventTime());
         Platform.runLater(() -> {
+            System.out.println("c");
             double time = ((double) (cal.getTime().getTime() - last.getTime().getTime())) / (1000 * 60 * 5);
             if (time > 10) {
                 last = cal;

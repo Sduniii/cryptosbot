@@ -10,9 +10,13 @@ public class Callback<T> {
         callbacks.add(call);
     }
 
-    public void callback(T response){
+    public void clearCallbacks(){
+        callbacks.clear();
+    }
+
+    public void callback(Event<T> response){
         for (CallbackInterface<T> callbackInterface : callbacks) {
-            callbackInterface.callback(response);
+            callbackInterface.callback(response.getEvent());
         }
     }
 }

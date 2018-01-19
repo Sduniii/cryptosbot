@@ -21,7 +21,7 @@ public class Starter extends Application{
         loader.setLocation(getClass().getResource("/fxml/startpage.fxml"));
         Parent root = loader.load();
         closeListeners.add(loader.getController());
-        Scene scene = new Scene(root, 400, 300);
+        Scene scene = new Scene(root, 800, 600);
         //scene.getStylesheets().add(getClass().getResource("/css/modena_dark.css").toExternalForm());
         stage.setTitle("My JavaFX Application");
         stage.setScene(scene);

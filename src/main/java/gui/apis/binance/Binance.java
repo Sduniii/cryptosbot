@@ -1,30 +1,52 @@
-package gui.apis;
+package gui.apis.binance;
 
-import com.binance.api.client.*;
+import com.binance.api.client.BinanceApiAsyncRestClient;
+import com.binance.api.client.BinanceApiClientFactory;
+import com.binance.api.client.BinanceApiRestClient;
+import com.binance.api.client.BinanceApiWebSocketClient;
 import com.binance.api.client.domain.account.Account;
 import com.binance.api.client.domain.account.AssetBalance;
 import com.binance.api.client.domain.event.CandlestickEvent;
+import com.binance.api.client.domain.general.ExchangeInfo;
 import com.binance.api.client.domain.market.*;
+import gui.apis.*;
+import gui.models.BarData;
+import javafx.collections.FXCollections;
 
 import java.util.ArrayList;
+import java.util.GregorianCalendar;
 import java.util.List;
 
-public class Binance extends Exchange implements ExchangeInterface {
+public class Binance extends Exchange {
     private BinanceApiRestClient restClient;
     private BinanceApiAsyncRestClient asyncRestClient;
     private BinanceApiWebSocketClient webSocketClient;
     private BinanceApiClientFactory factory;
-    private Callback<CandlestickEvent> candlestickEventCallbacks;
+    private Callback candlestickEventCallbacks;
 
-    public Binance(String name, String apiKey, String apiSecret) {
-        super(name, apiKey, apiSecret);
-        this.candlestickEventCallbacks = new Callback<>();
-        this.factory = BinanceApiClientFactory.newInstance(apiKey, apiSecret);
+
+    private ExchangeInfo exchangeInfo;
+
+    public Binance(String apiKey, String apiSecret) {
+        super("Binance", apiKey, apiSecret);
+        this.candlestickEventCallbacks = new Callback();
+        this.factory = BinanceApiClientFactory.newInstance(getApiKey(), getApiSecret());
         this.restClient = this.factory.newRestClient();
+        this.exchangeInfo = this.restClient.getExchangeInfo();
+        this.exchangeInfo.getSymbols().forEach(symbolInfo -> {
+            Asset as = getBaseAssets().stream().filter(asset -> asset.toString().equals(symbolInfo.getBaseAsset())).findFirst().orElse(getAssets().stream().filter(asset -> asset.toString().equals(symbolInfo.getBaseAsset())).findFirst().orElse(new Asset(symbolInfo.getBaseAsset())));
+            if(!getAssets().contains(as)) getAssets().add(as);
+            if(!getBaseAssets().contains(as)) getBaseAssets().add(as);
+            Asset quoteAsset = as.getSymbols().stream().filter(asset -> asset.toString().equals(symbolInfo.getQuoteAsset())).findFirst().orElse(getAssets().stream().filter(asset -> asset.toString().equals(symbolInfo.getQuoteAsset())).findFirst().orElse(new Asset(symbolInfo.getQuoteAsset())));
+            if(!as.getSymbols().contains(quoteAsset)) as.addSymbol(quoteAsset);
+            if(!getAssets().contains(quoteAsset)) getAssets().add(quoteAsset);
+            FXCollections.sort(as.getSymbols(),Asset.comparator());
+        });
+
+
+        FXCollections.sort(getAssets(),Asset.comparator());
         this.asyncRestClient = this.factory.newAsyncRestClient();
     }
-
-
 
     @Override
     public void startWebsocket(String symbol) {
@@ -32,17 +54,18 @@ public class Binance extends Exchange implements ExchangeInterface {
         this.webSocketClient.onCandlestickEvent(symbol, CandlestickInterval.ONE_MINUTE, this::websocketCallbackCandlestick);
     }
 
+    private void websocketCallbackCandlestick(CandlestickEvent candlestickEvent) {
+        candlestickEventCallbacks.callback(new CandleStickEvent<CandlestickEvent>(candlestickEvent));
+    }
+
     @Override
     public List<Candlestick> getCandlesticks(String symbol) {
         return this.restClient.getCandlestickBars(symbol, CandlestickInterval.ONE_MINUTE);
     }
 
-    public void websocketCallbackCandlestick(CandlestickEvent response) {
-        candlestickEventCallbacks.callback(response);
-    }
-
-    public void registerCallback(CallbackInterface<CandlestickEvent> call) {
-        candlestickEventCallbacks.addCallback(call);
+    @Override
+    public void clearCallbacks(){
+        candlestickEventCallbacks.clearCallbacks();
     }
 
 
@@ -135,5 +158,33 @@ public class Binance extends Exchange implements ExchangeInterface {
     @Override
     public Object getDepositHistory() {
         return null;
+    }
+
+    @Override
+    public void registerCallback(CallbackInterface<Event> callback) {
+            candlestickEventCallbacks.addCallback(callback);
+    }
+
+    @Override
+    public String toString() {
+        return getName();
+    }
+
+    @Override
+    public List<BarData> buildData(String symbol) {
+        List<Candlestick> candles = getCandlesticks(symbol);
+        List<BarData> data = new ArrayList<>();
+        candles.forEach(candlestick -> {
+            GregorianCalendar cal = new GregorianCalendar();
+            cal.setTimeInMillis(candlestick.getOpenTime());
+            BarData bar = new BarData(cal,
+                    Double.parseDouble(candlestick.getOpen()),
+                    Double.parseDouble(candlestick.getHigh()),
+                    Double.parseDouble(candlestick.getLow()),
+                    Double.parseDouble(candlestick.getClose()),
+                    (int) Double.parseDouble(candlestick.getVolume()));
+            data.add(bar);
+        });
+        return data;
     }
 }
