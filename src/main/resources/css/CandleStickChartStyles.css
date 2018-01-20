@@ -29,8 +29,13 @@ limitations under the License.
     -fx-background-color: rgb(255, 34, 34, 1.00);
 }
 
-.candlestick-line {
-    -fx-stroke: #FFFFFF;
+.candlestick-line.close-above-open {
+    -fx-stroke: rgb(25, 225, 25, 1.00);
+    -fx-stroke-width: 1px;
+}
+
+.candlestick-line.open-above-close {
+    -fx-stroke: rgb(255, 34, 34, 1.00);
     -fx-stroke-width: 1px;
 }
 

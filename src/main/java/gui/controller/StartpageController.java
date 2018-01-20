@@ -51,6 +51,7 @@ public class StartpageController implements Initializable, OnCloseListener, Call
         String secret = "";
         String key = "";
         binance = new Binance(key, secret);
+        binance.registerCandlestickCallback(this);
         exchanges.add(binance);
 
         cbExchange.setItems(exchanges);
@@ -67,21 +68,23 @@ public class StartpageController implements Initializable, OnCloseListener, Call
                 Exchange ex = cbExchange.getSelectionModel().getSelectedItem();
                 Asset asset1 = lvAsset1.getSelectionModel().getSelectedItem();
 
-                if (asset1 != null && ex != null) {
-                    ex.clearCallbacks();
+                if (asset1 != null && ex != null && newValue != null) {
+                    borderPane.setCenter(null);
                     last = new GregorianCalendar();
-                    StackPane chartContainer = new StackPane();
+//                    StackPane chartContainer = new StackPane();
                     String symbol = asset1.toString() + newValue.toString();
-                    candleStickChart = new CandleStickChart(ex.getName() +  symbol.toUpperCase(), ex.buildData(symbol.toUpperCase()));
-                    chartContainer.getChildren().add(candleStickChart);
-                    final Rectangle zoomRect = new Rectangle();
-                    zoomRect.setManaged(false);
-                    zoomRect.setFill(Color.LIGHTSEAGREEN.deriveColor(0, 1, 1, 0.5));
-                    chartContainer.getChildren().add(zoomRect);
-                    setUpZooming(zoomRect, candleStickChart);
-                    borderPane.setCenter(chartContainer);
-                    ex.registerCallback(this);
-                    ex.startWebsocket(symbol);
+                    candleStickChart = new CandleStickChart(ex.getName()+ " - " +  symbol.toUpperCase(), ex.buildCandlestickData(symbol.toUpperCase(), 1000*60*60));
+//                    chartContainer.getChildren().add(candleStickChart);
+//                    final Rectangle zoomRect = new Rectangle();
+//                    zoomRect.setManaged(false);
+//                    zoomRect.setFill(Color.LIGHTSEAGREEN.deriveColor(0, 1, 1, 0.5));
+//                    chartContainer.getChildren().add(zoomRect);
+//                    setUpZooming(zoomRect, candleStickChart);
+//                    borderPane.setCenter(chartContainer);
+                    borderPane.setCenter(candleStickChart);
+                    if(ex instanceof Binance) {
+                        ((Binance) ex).startWebsocket(symbol.toUpperCase());
+                    }
                 }
 
         });
@@ -162,7 +165,6 @@ public class StartpageController implements Initializable, OnCloseListener, Call
         GregorianCalendar cal = new GregorianCalendar();
         new GregorianCalendar().setTimeInMillis(candlestick.getEventTime());
         Platform.runLater(() -> {
-            System.out.println("c");
             double time = ((double) (cal.getTime().getTime() - last.getTime().getTime())) / (1000 * 60 * 5);
             if (time > 10) {
                 last = cal;

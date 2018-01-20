@@ -46,10 +46,8 @@ public abstract class Exchange {
     public void setBaseAssets(ObservableList<Asset> baseAssets){
         this.baseAssets = baseAssets;
     }
-
-    public abstract void startWebsocket(String symbol);
     public abstract Object getCandlesticks(String symbol);
-    public abstract List<BarData> buildData(String symbol);
+    public abstract List<BarData> buildCandlestickData(String symbol, long time);
     public abstract void ping();
     public abstract long getServertime();
     public abstract Object getOrderBook(String symbol, int amount);
@@ -67,6 +65,4 @@ public abstract class Exchange {
     public abstract void cancelOrder(String symbol, long orderId);
     public abstract Object getWithdrawHistory();
     public abstract Object getDepositHistory();
-    public abstract void registerCallback(CallbackInterface<Event> callback);
-    public abstract void clearCallbacks();
 }

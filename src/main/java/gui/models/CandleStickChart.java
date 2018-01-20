@@ -217,7 +217,7 @@ public class CandleStickChart extends XYChart<Date, Number> {
                     double close = getYAxis().getDisplayPosition(bar.getClose());
                     double high = getYAxis().getDisplayPosition(bar.getHigh());
                     double low = getYAxis().getDisplayPosition(bar.getLow());
-                    double candleWidth = 3;
+                    double candleWidth = 7;
                     // update candle
                     candle.update(close - y, high - y, low - y, candleWidth);
 
@@ -395,7 +395,8 @@ public class CandleStickChart extends XYChart<Date, Number> {
 
         private Candle(String seriesStyleClass, String dataStyleClass) {
             setAutoSizeChildren(false);
-            getChildren().addAll(highLowLine, bar);
+            getChildren().addAll(bar, highLowLine);
+            highLowLine.toBack();
             this.seriesStyleClass = seriesStyleClass;
             this.dataStyleClass = dataStyleClass;
             updateStyleClasses();

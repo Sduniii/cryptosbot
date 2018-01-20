@@ -9,53 +9,64 @@ import com.binance.api.client.domain.account.AssetBalance;
 import com.binance.api.client.domain.event.CandlestickEvent;
 import com.binance.api.client.domain.general.ExchangeInfo;
 import com.binance.api.client.domain.market.*;
+import com.binance.api.client.impl.BinanceApiWebSocketClientImpl;
 import gui.apis.*;
 import gui.models.BarData;
+import gui.models.BinanceWebsocket;
 import javafx.collections.FXCollections;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.List;
 
 public class Binance extends Exchange {
     private BinanceApiRestClient restClient;
     private BinanceApiAsyncRestClient asyncRestClient;
-    private BinanceApiWebSocketClient webSocketClient;
+    private BinanceWebsocket webSocketClient;
     private BinanceApiClientFactory factory;
-    private Callback candlestickEventCallbacks;
+    private CallbackInterface<CandlestickEvent> candlestickEventCallback;
+    private String oldWebSocketSymbol = "";
 
 
     private ExchangeInfo exchangeInfo;
 
     public Binance(String apiKey, String apiSecret) {
         super("Binance", apiKey, apiSecret);
-        this.candlestickEventCallbacks = new Callback();
         this.factory = BinanceApiClientFactory.newInstance(getApiKey(), getApiSecret());
         this.restClient = this.factory.newRestClient();
         this.exchangeInfo = this.restClient.getExchangeInfo();
         this.exchangeInfo.getSymbols().forEach(symbolInfo -> {
             Asset as = getBaseAssets().stream().filter(asset -> asset.toString().equals(symbolInfo.getBaseAsset())).findFirst().orElse(getAssets().stream().filter(asset -> asset.toString().equals(symbolInfo.getBaseAsset())).findFirst().orElse(new Asset(symbolInfo.getBaseAsset())));
-            if(!getAssets().contains(as)) getAssets().add(as);
-            if(!getBaseAssets().contains(as)) getBaseAssets().add(as);
+            if (!getAssets().contains(as)) getAssets().add(as);
+            if (!getBaseAssets().contains(as)) getBaseAssets().add(as);
             Asset quoteAsset = as.getSymbols().stream().filter(asset -> asset.toString().equals(symbolInfo.getQuoteAsset())).findFirst().orElse(getAssets().stream().filter(asset -> asset.toString().equals(symbolInfo.getQuoteAsset())).findFirst().orElse(new Asset(symbolInfo.getQuoteAsset())));
-            if(!as.getSymbols().contains(quoteAsset)) as.addSymbol(quoteAsset);
-            if(!getAssets().contains(quoteAsset)) getAssets().add(quoteAsset);
-            FXCollections.sort(as.getSymbols(),Asset.comparator());
+            if (!as.getSymbols().contains(quoteAsset)) as.addSymbol(quoteAsset);
+            if (!getAssets().contains(quoteAsset)) getAssets().add(quoteAsset);
+            FXCollections.sort(as.getSymbols(), Asset.comparator());
         });
 
 
-        FXCollections.sort(getAssets(),Asset.comparator());
+        FXCollections.sort(getAssets(), Asset.comparator());
         this.asyncRestClient = this.factory.newAsyncRestClient();
     }
 
-    @Override
     public void startWebsocket(String symbol) {
-        this.webSocketClient = BinanceApiClientFactory.newInstance().newWebSocketClient();
-        this.webSocketClient.onCandlestickEvent(symbol, CandlestickInterval.ONE_MINUTE, this::websocketCallbackCandlestick);
+        if (this.webSocketClient == null) {
+            this.webSocketClient = new BinanceWebsocket();
+        }
+        this.webSocketClient.closeWebSocket(oldWebSocketSymbol);
+        this.webSocketClient.onCandlestickEvent(symbol.toLowerCase(), CandlestickInterval.ONE_MINUTE, candlestickEvent -> {
+            System.out.println(candlestickEvent.toString());
+            websocketCandlestickCallback(candlestickEvent);
+        });
+        this.oldWebSocketSymbol = symbol;
     }
 
-    private void websocketCallbackCandlestick(CandlestickEvent candlestickEvent) {
-        candlestickEventCallbacks.callback(new CandleStickEvent<CandlestickEvent>(candlestickEvent));
+    private void websocketCandlestickCallback(CandlestickEvent candlestickEvent) {
+        //System.out.println(candlestickEvent.getSymbol());
+        candlestickEventCallback.callback(candlestickEvent);
     }
 
     @Override
@@ -63,11 +74,17 @@ public class Binance extends Exchange {
         return this.restClient.getCandlestickBars(symbol, CandlestickInterval.ONE_MINUTE);
     }
 
-    @Override
-    public void clearCallbacks(){
-        candlestickEventCallbacks.clearCallbacks();
+    public List<Candlestick> getCandlesticks(String symbol, long start, long end) {
+        return this.restClient.getCandlestickBars(symbol, CandlestickInterval.ONE_MINUTE, 100, start, end);
     }
 
+    public void registerCandlestickCallback(CallbackInterface<CandlestickEvent> callback) {
+        candlestickEventCallback = callback;
+    }
+
+    public void clearCandlestickCallback() {
+        candlestickEventCallback = null;
+    }
 
     @Override
     public void ping() {
@@ -81,7 +98,7 @@ public class Binance extends Exchange {
 
     @Override
     public OrderBook getOrderBook(String symbol, int amount) {
-        return this.restClient.getOrderBook(symbol,amount);
+        return this.restClient.getOrderBook(symbol, amount);
     }
 
     @Override
@@ -93,7 +110,7 @@ public class Binance extends Exchange {
     @Override
     public List<Double> getAllLatestPrices() {
         List<TickerPrice> allPrices = this.restClient.getAllPrices();
-        List<Double> ret =  new ArrayList<>();
+        List<Double> ret = new ArrayList<>();
         allPrices.forEach(tickerPrice -> ret.add(Double.valueOf(tickerPrice.getPrice())));
         return ret;
     }
@@ -105,7 +122,7 @@ public class Binance extends Exchange {
     }
 
     @Override
-    public double getBalance(String asset){
+    public double getBalance(String asset) {
         Account account = this.restClient.getAccount();
         return Double.valueOf(account.getAssetBalance(asset).getFree());
     }
@@ -161,18 +178,15 @@ public class Binance extends Exchange {
     }
 
     @Override
-    public void registerCallback(CallbackInterface<Event> callback) {
-            candlestickEventCallbacks.addCallback(callback);
-    }
-
-    @Override
     public String toString() {
         return getName();
     }
 
     @Override
-    public List<BarData> buildData(String symbol) {
-        List<Candlestick> candles = getCandlesticks(symbol);
+    public List<BarData> buildCandlestickData(String symbol, long time) {
+        long end = new Date().getTime();
+        long start = end - time;
+        List<Candlestick> candles = getCandlesticks(symbol, start, end);
         List<BarData> data = new ArrayList<>();
         candles.forEach(candlestick -> {
             GregorianCalendar cal = new GregorianCalendar();
